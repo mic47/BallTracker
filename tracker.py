@@ -4,6 +4,7 @@ import numpy
 import math
 import random
 import sys
+from collections import defaultdict
 
 import argparse
 
@@ -19,7 +20,7 @@ class GlobalParameters:
     frameCount = -1
     captureDevice = None
     binaryThreshold = 70
-    trackerMinLivespan = 20
+    trackerMinLivespan = 100
     trackerMaxDistance = 10
     trackerMaxFrameMissing = 20
     speed = 10
@@ -36,11 +37,12 @@ class ObjectTracker:
                        (255, 255, 0), (255, 0, 255), (0, 255, 255)]
     
     
-    def archiveObjects(self, frame):
+    def archiveObjects(self, frame, force_all=False):
         # Archive objects
         global glob
         for i in range(len(self.objects)):
-            if frame - self.objects[i][-1][2] < glob.trackerMaxFrameMissing:
+            if frame - self.objects[i][-1][2] < glob.trackerMaxFrameMissing \
+                and not force_all:
                 continue
             if len(self.objects[i]) >= glob.trackerMinLivespan:
                 self.archived.append(self.objects[i])
@@ -71,6 +73,24 @@ class ObjectTracker:
                 self.objects[index].append(hist)
         if nearest == None:
             self.objects.append([hist])
+        
+        
+    def saveArchivedObjects(self, filename):
+        
+        frames = set()
+        for index in range(len(self.archived)):
+            for _, _, frame, _ in self.archived[index]:    
+                frames.add(frame)
+        frames = sorted(list(frames))
+        width = 2 + 3 * len(self.archived)
+        d = defaultdict(lambda *_: ['']*width)
+        for index in range(len(self.archived)):
+            for (x, y), radius, frame, time in self.archived[index]:
+                d[frame][:2] = [frame, time]
+                d[frame][2 + index * 3:2 + (index + 1) * 3] = [x, y, radius]
+        with open(filename, 'w') as f:
+            for frame in frames:
+                f.write(','.join([str(x) for x in d[frame]]) + '\n')
         
         
     def drawObjects(self, Image, frame):
@@ -314,52 +334,57 @@ def trackBall(filename, output_file, skip, empty_frame,
             
         if currentFrame % 1000 == 0 and currentFrame > 0:
             now = time.time()
-            print('{progress:3}% done in {time} seconds, should finish ' + \
-                  'in {estimate} seconds.'.format(
+            print(('{progress:3}% done in {time} seconds, should finish ' + \
+                  'in {estimate} seconds.').format(
                 progress=100 * currentFrame / glob.frameCount, 
                 time=now - start,
                 estimate = (glob.frameCount - currentFrame) * (now - start) / 
                     currentFrame
             ))
     
+    tracker.archiveObjects(currentFrame, True)
+    tracker.saveArchivedObjects(output_file)
+    
 
 
 
 if __name__ == "__main__":
-    #TODO: umoznit skipovat
-    #TODO: ked skonci program, vypis command-linove parametre
-    #TODO: ukladanie do suboru
-    #TODO: zapametanie si casu framu
     parser = argparse.ArgumentParser()
     parser.add_argument('video', type=str, help="input video")
     parser.add_argument('output', type=str, help="output file")
-    parser.add_argument('--binaryThreshold', type=int, default=70, 
+    parser.add_argument('--binaryThreshold', type=int, 
+                        default=glob.binaryThreshold, 
                         help='Anything with color less than threshold will ' + 
                         'be black, other will be white.')
     parser.add_argument('--emptyFrame', type=int, default=400, 
                         help='Index of frame that is empty.')
-    parser.add_argument('--imageMult', type=int, default=3, 
+    parser.add_argument('--imageMult', type=float, default=glob.imageMult, 
                         help='How much to brighten image.')
-    parser.add_argument('--ballRatioThreshold', type=float, default=0.4, 
+    parser.add_argument('--ballRatioThreshold', type=float,
+                        default=glob.ballRatioThres, 
                         help='Allowed deviation of volume from circle for ' +
                         'detected object (0 = perfect circle).')
-    parser.add_argument('--ballMinVolume', type=int, default=50, 
+    parser.add_argument('--ballMinVolume', type=int, default=glob.ballMinVolume, 
                         help='Objects with volume less than this will be ' + 
                         'discarded.') 
-    parser.add_argument('--ballMaxVolume', type=int, default=300, 
+    parser.add_argument('--ballMaxVolume', type=int, default=glob.ballMaxVolume, 
                         help='Objects with volume more than this will be ' +
                         'discarded.')
-    parser.add_argument('--trackerMinLivespan', type=int, default=20, 
+    parser.add_argument('--trackerMinLivespan', type=int, 
+                        default=glob.trackerMinLivespan, 
                         help='Objects with shorter history that provided ' +
                         'value will be discarded (not saved to the output).')
-    parser.add_argument('--trackerMaxDistance', type=int, default=10, 
+    parser.add_argument('--trackerMaxDistance', type=int,
+                        default=glob.trackerMaxDistance, 
                         help='If object will move more than this from his ' +
                         'last detected frame, consider it as new object.')
-    parser.add_argument('--trackerMaxMissingFrames', type=int, default=20, 
+    parser.add_argument('--trackerMaxMissingFrames', type=int, 
+                        default=glob.trackerMaxFrameMissing, 
                         help='If object will not be detected for more than' +
                         ' this number of frames, it will be considered dead.')
-    parser.add_argument('--speed', type=int, default=10, help='Delay in ' +
-                        'milliseconds between showing next frame.')
+    parser.add_argument('--speed', type=int, default=glob.speed, 
+                        help='Delay in milliseconds between showing ' + 
+                        'next frame.')
     parser.add_argument('--singleWindow', action="store_true", 
                         help='Settings will be in the same window as image ' +
                         '(good for tall monitors).')
@@ -392,3 +417,32 @@ if __name__ == "__main__":
         arg.singleWindow,
         arg.noGUI
     )
+    param = [
+        '--binaryThreshold', glob.binaryThreshold,
+        '--emptyFrame', arg.emptyFrame,
+        '--imageMult', glob.imageMult,
+        '--ballRatioThreshold', glob.ballRatioThres,
+        '--ballMinVolume', glob.ballMinVolume,
+        '--ballMaxVolume', glob.ballMaxVolume,
+        '--trackerMinLivespan', glob.trackerMinLivespan,
+        '--trackerMaxDistance', glob.trackerMaxDistance,
+        '--trackerMaxMissingFrames', glob.trackerMaxFrameMissing,
+        '--speed', glob.speed,   
+    ]
+    if arg.singleWindow:
+        param.append('--singleWindow')
+    if arg.noGUI:
+        param.append('--noGUI')
+    param.append("'" + arg.video + "'")
+    param.append("'" + arg.output + "'")
+    if len(arg.skip) > 0:
+        param.append('--skip')
+        param.extend(arg.skip)
+    
+    command_line = 'python {script} {params}'.format(
+        script=sys.argv[0],
+        params=' '.join([str(x) for x in param])
+    )
+    print('\n\n')
+    print('To run this program again, just run:\n\n{0}\n'.format(command_line))
+    print('Add --noGUI if you do not want to see GUI (it is really faster).')
