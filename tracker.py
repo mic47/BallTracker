@@ -117,7 +117,6 @@ def getImagesIterable(captureDevice):
         ret = captureDevice.read()
         if ret[0] == False:
             break
-        #yield ret
         yield ret[1]
 
 
@@ -256,12 +255,11 @@ def trackBall(filename, output_file, skip, empty_frame,
         if not noGUI:
             cv2.setTrackbarPos('Frame #', 'img', currentFrame)
         image = cv2.convertScaleAbs(image, alpha=glob.imageMult)
-        #image *= glob.imageMult
 
         grayscale = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
        
         first = numpy.array(first, dtype=numpy.float32)
-        cv2.accumulateWeighted(grayscale, first, 0.025, 255 - lastMask) # Mozem pridat mask ako threshold z predchadzajuceho
+        cv2.accumulateWeighted(grayscale, first, 0.025, 255 - lastMask) 
         first = cv2.convertScaleAbs(first)
         firstAvg = numpy.average(first)
        
@@ -289,7 +287,7 @@ def trackBall(filename, output_file, skip, empty_frame,
         lastMask = I * 0
         newc = []
         for contour in contours:
-            #contour = cv2.convexHull(contour)
+            contour = cv2.convexHull(contour)
             area = cv2.contourArea(contour)
             points = []
             for c in contour:
