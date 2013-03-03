@@ -13,7 +13,7 @@ def L2(x, y):
 
 
 class GlobalParameters:
-    imageMult = 3
+    imageMult = 5
     ballRatioThres = 0.4
     ballMinVolume = 50
     ballMaxVolume = 300
@@ -109,7 +109,7 @@ class ObjectTracker:
             radius = obj[-1][1]
             for f, t in zip(obj, obj[1:]):
                 cv2.line(Image, f[0], t[0], self.colors[index])
-            cv2.circle(Image, point, radius, self.colors[index], 2, 8, 0)
+            cv2.circle(Image, point, radius, self.colors[index], 1, 8, 0)
             
 
 def getImagesIterable(captureDevice):
@@ -225,6 +225,7 @@ def trackBall(filename, output_file, skip, empty_frame,
     _, first = getFrame(filename, empty_frame)
     first = cv2.cvtColor(first, cv2.COLOR_RGB2GRAY)
     firstAvg = numpy.average(first)
+    lastMask = first * 0
     print('Grabbed first frame in {time} seconds.'.format(
         time=time.time() - start))
     
@@ -249,14 +250,22 @@ def trackBall(filename, output_file, skip, empty_frame,
         nextFrame = int(glob.captureDevice.get(cv2.cv.CV_CAP_PROP_POS_FRAMES))
         nextFrameTime = glob.captureDevice.get(cv2.cv.CV_CAP_PROP_POS_MSEC)
         
+        if shouldSkip(currentFrame, skip):
+            continue
+        
         if not noGUI:
             cv2.setTrackbarPos('Frame #', 'img', currentFrame)
-        image *= glob.imageMult
+        image = cv2.convertScaleAbs(image, alpha=glob.imageMult)
+        #image *= glob.imageMult
 
         grayscale = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
        
-        if shouldSkip(currentFrame, skip):
-            continue
+        first = numpy.array(first, dtype=numpy.float32)
+        cv2.accumulateWeighted(grayscale, first, 0.025, 255 - lastMask) # Mozem pridat mask ako threshold z predchadzajuceho
+        first = cv2.convertScaleAbs(first)
+        firstAvg = numpy.average(first)
+       
+        
         grayscaleAvg = numpy.average(grayscale)
         difference = cv2.subtract(
                     numpy.array(
@@ -277,8 +286,10 @@ def trackBall(filename, output_file, skip, empty_frame,
         II = numpy.array(I)
         contours, _ = cv2.findContours(II, cv2.cv.CV_RETR_LIST, 
                                        cv2.cv.CV_CHAIN_APPROX_SIMPLE)
+        lastMask = I * 0
         newc = []
         for contour in contours:
+            #contour = cv2.convexHull(contour)
             area = cv2.contourArea(contour)
             points = []
             for c in contour:
@@ -304,6 +315,7 @@ def trackBall(filename, output_file, skip, empty_frame,
             newc.append(contour)
             tracker.addObject(((maxX + minX)/2, (maxY + minY)/2), min(dX, dY)/2,
                               currentFrame, currentFrameTime)
+            cv2.drawContours(lastMask, [contour], -1, (255, 255, 255))
         contours = numpy.array(newc)
         tracker.archiveObjects(currentFrame)
         if not noGUI:
