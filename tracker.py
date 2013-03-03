@@ -255,6 +255,7 @@ def trackBall(filename, output_file, skip, empty_frame,
         if not noGUI:
             cv2.setTrackbarPos('Frame #', 'img', currentFrame)
         image = cv2.convertScaleAbs(image, alpha=glob.imageMult)
+        cv2.normalize(image,image,0,255,cv2.NORM_MINMAX)
 
         grayscale = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
        
@@ -265,7 +266,7 @@ def trackBall(filename, output_file, skip, empty_frame,
        
         
         grayscaleAvg = numpy.average(grayscale)
-        difference = cv2.subtract(
+        difference = cv2.absdiff(   
                     numpy.array(
                         numpy.array(
                             first, 
